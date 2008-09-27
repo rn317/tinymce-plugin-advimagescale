@@ -1,0 +1,110 @@
+#summary How to use the plugin with TinyMCE
+#labels Featured,Phase-Deploy
+
+= Plugin Usage Instructions =
+
+Start with a working instance of TinyMCE.  Then add the advimagescale plugin by placing the advimagescale folder in your TinyMCE plugins folder, and adding advimagescale to the TinyMCE.init "plugins" configuration parameter.
+
+*Note that if you are using any of the `max_*` or `min_*` options and you wish for them to be immediately enforced upon TinyMCE initialization, then you _must_ set the _`cleanup_on_startup`_ configuration option to true.*
+
+By default (with no options set), the plugin manages *all images* in the editor, forcing them to *maintain the same aspect ratio they started with*.
+
+== Full example ==
+
+This is a full example of all possible options (except for the `advimagescale_filter_*` options).   It assumes you have placed the advimagescale folder in your TinyMCE plugins directory.
+
+{{{
+tinyMCE.init({
+    mode : "textareas",
+    plugins: 'advimagescale',
+    cleanup_on_startup: true,
+    advimagescale_append_to_url: true,
+    advimagescale_url_width_key: 'w',
+    advimagescale_url_height_key: 'h',
+    advimagescale_max_height: 200,
+    advimagescale_max_width:  200,
+    advimagescale_min_height: 20, 
+    advimagescale_min_width:  20
+});
+
+<form>
+	<textarea name="content">
+		<!-- this image is managed by advimagescale -->
+		<img src="http://mydomain.com/dynamic-image.php?id=1234" class="scale_this_image" width="100" height="100" />
+		<!-- this image is ignored by advimagescale -->
+		<img src="http://mydomain.com/images/picture.jpg" width="100" height="100" />
+	</textarea>
+</form>
+
+}}}
+
+== Placing advimagescale outside of your TinyMCE plugins folder ==
+
+If you would prefer to place the advimagescale folder outside of your TinyMCE plugins folder, than prefix the plugin name with a dash and then include the script manually:
+
+{{{
+    tinyMCE.init({
+      ...
+      plugins: '-advimagescale'
+      ...
+    });
+    <script src="/path/to/advimagescale/editor_plugin.js"></script>
+}}} 
+
+== Restrict by class name ==
+
+You may limit the plugin to only manage images with a specific class by using the advimagescale_filter_class configuration option.  For example, to only manage images with the class "scale_me", you would set:
+
+{{{
+    tinyMCE.init({
+       /* same options as the first example, plus: */
+       advimagescale_filter_class: "scale_me"
+    });
+}}}
+
+== Restrict by image URL with a regular expression ==
+
+Instead of limiting by image class name, you may define a regular expression pattern using *advimagescale_filter_src*.  If the image URL matches the pattern, then it is managed by the plugin.  Both advimagescale_filter_src and advimagescale_filter_class can be used at the same time for additional selectivity, if you require it (i.e. BOTH conditions must match for the image to be managed by the plugin).
+
+{{{
+    tinyMCE.init({
+        /* sample options as the first example, plus: */
+        advimagescale_filter_src: '\\d{3,}' /* image must have at least 3 digits in the URL */
+    });
+}}}
+
+== All Options ==
+Note: *All advimagescale`_``*` options are optional.*  By default, the plugin only maintains image aspect ratios.  However, additional features exist to *set minimum and maimum widths and heights*, *append image dimensions to the querystring*, and *filter which images get managed by the plugin*.
+
+|| *Configuration option* || *Type* || *Default* || *Description* ||
+|| advimagescale_append_to_url || boolean || false || Whether to append the image width/height to the IMG SRC. (i.e. `http://mydomain.com/images.php?id=123&w=120&h=120`). This is used for doing automatic server-side resampling of scaled images ||
+|| advimagescale_url_width_key || string || 'w' || The querystring parameter to use when appending width to the URL ||
+|| advimagescale_url_height_key || string || 'h' || The querystring parameter to use when appending width to the URL ||
+|| advimagescale_max_height || integer || not set || Set a value to limit the maximum image height of all images ||
+|| advimagescale_max_width || integer || not set || Set max image width ||
+|| advimagescale_min_height || integer || not set || Set min image height ||
+|| advimagescale_min_width || integer || not set || Set min image width ||
+|| advimagescale_filter_src || string || not set || A regular expression; all image SRC attributes that match this regexp will be managed by the plugin ||
+|| advimagescale_filter_class || string || not set || A CSS class name; all IMG tags with this class will be managed by the plugin _(if not set, all images are managed by the plugin)_ ||
+
+== Server-side image resampling ==
+
+The advimagescale_append_to_url option (and the configurable parameter names with advimagescale_url_width_key and advimagescale_url_height_key) provide a simple solution for auto-rescaling images on the server side.  
+
+For example, you would begin by inserting an dynamic image URL (usually a PHP script) which performs resampling (if necessary) and then redirects to the properly sized image.  
+
+Assuming the initially inserted image had its width and height attributes set to 100x100, advimagescale will immediately overwrite the source URL for that image from:
+
+`http://mydomain.com/image.php?id=123`
+to
+`http://mydomain.com/image.php?id=123&w=100&h=100`
+
+This signals your "image.php" script that it needs to serve image `#`123, resampled to 100x100 pixels.
+
+Now, if the user scales the image up to 500x500, the URL will change to:
+
+`http://mydomain.com/image.php?id=123&w=500&h=500`
+
+... and your CMS will now know that it needs to resample the original source image for image `#`123 to 500x500 pixels, and then redirect to that image so the user receives an updated version to fit the new dimensions.
+
+This feature is intended to allow seamless scaling up and down of images without loss of quality.
