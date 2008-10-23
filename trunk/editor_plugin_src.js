@@ -38,7 +38,8 @@
 		 * @param {string} url Absolute URL to where the plugin is located.
 		 */
 		init : function(ed, url) {
-			// Watch for mouseup (could be an image resize)
+		
+			// Watch for mouseup (catch image resizes)
 			ed.onMouseUp.add(function(ed, e) {
 				currentNode = tinyMCE.activeEditor.selection.getNode();
 				if (currentNode.nodeName == 'IMG') {
@@ -49,27 +50,16 @@
 				}
 			});
 
-			// Assign all img tags a unique mce_advimageresize_id
-			// This tag is auto-removed by tinyMCE's invalid_elements list
-			ed.onPreProcess.add(function(ed, o) {
-				tinymce.each(ed.dom.select('img', o.node), function(currentNode) {
-					if (!ed.dom.getAttrib(currentNode, 'mce_advimageresize_id')) {
-						// assign unique ID
-						ed.dom.setAttrib(currentNode, 'mce_advimageresize_id', ed.dom.uniqueId());
-					} 
-				});
-			});
-
-			// Append image dimensions? (optional)
+			// Append image dimensions to image URLs? (optional)
 			if (ed.getParam('advimagescale_append_to_url')) {
-				// Create callback to try to append image dimensions to all URLs on serializer runs
+				// Run constrainSize immediately on all image nodes to append image dimensions to URL
 				ed.onPreProcess.add(function(ed, o) {
 					tinymce.each(ed.dom.select('img', o.node), function(currentNode) {
 						constrainSize(currentNode);
 					});
 				});
 			}
-
+			
 		},
 
 		/**
@@ -84,7 +74,7 @@
 				author    : 'Marc Hodgins',
 				authorurl : 'http://www.hodginsmedia.com',
 				infourl   : 'http://code.google.com/p/tinymce-plugin-advimagescale',
-				version   : '1.0'
+				version   : '1.0.2'
 			};
 		}
 	});
@@ -119,6 +109,12 @@
 		var dom = ed.dom;
 		var elId = dom.getAttrib(el, 'mce_advimageresize_id');
 
+		// node must have a unique mce_advimageresize_id before we do anything with it
+		if (!elId) {
+			dom.setAttrib(el, 'mce_advimageresize_id', ed.dom.uniqueId());
+			elId = dom.getAttrib(el, 'mce_advimageresize_id');
+		}
+		
 		storeDimensions(el);
 
 		// allow filtering by regexp so only some images get constrained
