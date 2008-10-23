@@ -49,6 +49,17 @@
 				}
 			});
 
+			// Assign all img tags a unique mce_advimageresize_id
+			// This tag is auto-removed by tinyMCE's invalid_elements list
+			ed.onPreProcess.add(function(ed, o) {
+				tinymce.each(ed.dom.select('img', o.node), function(currentNode) {
+					if (!ed.dom.getAttrib(currentNode, 'mce_advimageresize_id')) {
+						// assign unique ID
+						ed.dom.setAttrib(currentNode, 'mce_advimageresize_id', ed.dom.uniqueId());
+					} 
+				});
+			});
+
 			// Append image dimensions? (optional)
 			if (ed.getParam('advimagescale_append_to_url')) {
 				// Create callback to try to append image dimensions to all URLs on serializer runs
@@ -58,6 +69,7 @@
 					});
 				});
 			}
+
 		},
 
 		/**
@@ -89,10 +101,11 @@
 	{
 		var ed = tinyMCE.activeEditor;
 		var dom = ed.dom;
+		var elId = dom.getAttrib(el, 'mce_advimageresize_id');
 
 		// store original dimensions if this is the first resize of this element
-		if (!originalDimensions[el]) {
-			originalDimensions[el] = lastDimensions[el] = {width: dom.getAttrib(el, 'width'), height: dom.getAttrib(el, 'height')};
+		if (!originalDimensions[elId]) {
+			originalDimensions[elId] = lastDimensions[elId] = {width: dom.getAttrib(el, 'width'), height: dom.getAttrib(el, 'height')};
 		}
 		return true;
 	}
@@ -104,6 +117,7 @@
 	{
 	        var ed  = tinyMCE.activeEditor;
 		var dom = ed.dom;
+		var elId = dom.getAttrib(el, 'mce_advimageresize_id');
 
 		storeDimensions(el);
 
@@ -145,7 +159,7 @@
 		}
 
 		// remember "last dimensions" for next time ..
-	        lastDimensions[el] = { width: dom.getAttrib(el, 'width'), height: dom.getAttrib(el, 'height') };
+	        lastDimensions[elId] = { width: dom.getAttrib(el, 'width'), height: dom.getAttrib(el, 'height') };
 	}
 
 	/**
@@ -197,15 +211,19 @@
 	 */
 	function maintainAspect(w, h, el, maxW, maxH, minW, minH)
 	{
+		var ed    = tinyMCE.activeEditor;
+		var dom   = ed.dom;
+		var elId  = dom.getAttrib(el, 'mce_advimageresize_id');
+
 		// calculate aspect ratio of original so we can maintain it
-	        var oW = originalDimensions[el].width;
-	        var oH = originalDimensions[el].height;
+	        var oW = originalDimensions[elId].width;
+	        var oH = originalDimensions[elId].height;
 	        var ratio = oW/oH;
 	
 		// decide which dimension changed more (percentage),  because that's the
 	        // one we'll respect (the other we'll adjust to keep aspect ratio)
-		var lastW  = lastDimensions[el].width;
-		var lastH  = lastDimensions[el].height;
+		var lastW  = lastDimensions[elId].width;
+		var lastH  = lastDimensions[elId].height;
 		var deltaW = Math.abs(lastW - w); // absolute
 		var deltaH = Math.abs(lastH - h); // absolute
 		var pctW   = Math.abs(deltaW / lastW); // percentage
