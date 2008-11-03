@@ -5,7 +5,7 @@
 
 Start with a working instance of TinyMCE.  Then add the advimagescale plugin by placing the advimagescale folder in your TinyMCE plugins folder, and adding advimagescale to the TinyMCE.init "plugins" configuration parameter.
 
-*Note that if you are using any of the `max_*` or `min_*` options and you wish for them to be immediately enforced upon TinyMCE initialization, then you _must_ set the _`cleanup_on_startup`_ configuration option to true.*
+*Note that if you are using any of the `advimagescale_max_*` or `advimagescale_min_*` options and you wish for them to be immediately enforced upon TinyMCE initialization, then you _must_ set the _`cleanup_on_startup`_ configuration option to true.*
 
 By default (with no options set), the plugin manages *all images* in the editor, forcing them to *maintain the same aspect ratio they started with*.
 
@@ -24,15 +24,21 @@ tinyMCE.init({
     advimagescale_max_height: 200,
     advimagescale_max_width:  200,
     advimagescale_min_height: 20, 
-    advimagescale_min_width:  20
+    advimagescale_min_width:  20,
+    advimagescale_loading_callback: function(imgNode) {
+        alert(imgNode.src + ' is loading');
+    },
+    advimagescale_loaded_callback: function(imgNode) {
+        alert(imgNode.src + ' is loaded');
+    }
 });
 
 <form>
 	<textarea name="content">
 		<!-- this image is managed by advimagescale -->
 		<img src="http://mydomain.com/dynamic-image.php?id=1234" width="100" height="100" />
-		<!-- this image is ignored by advimagescale -->
-		<img src="http://mydomain.com/images/picture.jpg" width="100" height="100" />
+		<!-- this image size is locked with mce_noresize and cannot be resized -->
+		<img mce_noresize="1" src="http://mydomain.com/images/picture.jpg" width="100" height="100" />
 	</textarea>
 </form>
 
@@ -40,16 +46,22 @@ tinyMCE.init({
 
 == Placing advimagescale outside of your TinyMCE plugins folder ==
 
-If you would prefer to place the advimagescale folder outside of your TinyMCE plugins folder, than prefix the plugin name with a dash and then include the script manually:
+If you would prefer to place the advimagescale folder outside of your TinyMCE plugins folder, then load it via tinymce.PluginManager.load() and then prefix the plugin name with a dash in the plugins init option:
 
 {{{
+    tinymce.PluginManager.load('advimagescale', '/lib/advimagescale/editor_plugin_src.js');
     tinyMCE.init({
       ...
       plugins: '-advimagescale'
       ...
     });
-    <script src="/path/to/advimagescale/editor_plugin.js"></script>
 }}} 
+
+== Prevent image resizing (on certain images) ==
+
+You can *prevent image resizing* on any IMG tag by setting the mce_noresize="1" attribute set that IMG tag - for example <img src="" mce_noresize="1">. Note that the mce_noresize attribute will be removed before saving, so this option will *not* get saved for future edits.
+
+Alternately, use the *advimage_noresize_class* setting to specify a single image class name that will be prevented from resizing (i.e. <img src="" class="noresize">).
 
 == Restrict by class name ==
 
@@ -86,6 +98,9 @@ Note: *All advimagescale`_``*` options are optional.*  By default, the plugin on
 || advimagescale_min_width || integer || not set || Set min image width ||
 || advimagescale_filter_src || string || not set || A regular expression; all image SRC attributes that match this regexp will be managed by the plugin ||
 || advimagescale_filter_class || string || not set || A CSS class name; all IMG tags with this class will be managed by the plugin _(if not set, all images are managed by the plugin)_ ||
+|| advimagescale_loading_callback || function || not set || Callback function for whenever an image is reloading - passes the DOM image node as parameter (often used to show a "please wait" dialog or disable form submission while an image is resizing in conjuction with the advimagescale_append_to_url option) ||
+|| advimagescale_loaded_callback || function || not set || Callback function, called when an image has completed resizing ||
+|| advimage_noresize_class || string || 'noresize' || A single class name that, if set on an image, tells the plugin to prevent resizing on that image ||
 
 == Server-side image resampling ==
 
@@ -108,3 +123,13 @@ Now, if the user scales the image up to 500x500, the URL will change to:
 ... and your CMS will now know that it needs to resample the original source image for image `#`123 to 500x500 pixels, and then redirect to that image so the user receives an updated version to fit the new dimensions.
 
 This feature is intended to allow seamless scaling up and down of images without loss of quality.
+
+Use the *advimagescale_loading_callback* and *advimagescale_loaded_callback* callback options if you'd like to be notified when an image begins reloading and completes reloading.
+
+== Bug Fixes ==
+
+There are two browser bugs that we discovered while developing this plugin, and have implemented workarounds.  Specifically, Gecko-based browsers (Firefox):
+
+  # *Resize handles do not re-draw*. When the plugin changes the image dimensions to maintain aspect ratio, Gecko does not move the resize handles to wrap the new image dimensions.  This has been worked around by forcing a redraw of the TinyMCE area.  The side effect is that this de-selects the image.  To continue further resizing, you must re-select the image by clicking on it.
+
+  # *Click on resize handles (without dragging to new position) causes image to grow*.  This occurs only when an image also has a border set via the tinymce content_css directive.  This bug is present without this plugin, we are simply working around it here as a convenience.  As a workaround, when clicking on image resize handles (but releasing the mouse without dragging them to a new location), the original dimensions will be preserved and the image will be de-selected (as a consequence of our workaround applying a tinyMCE redraw).
