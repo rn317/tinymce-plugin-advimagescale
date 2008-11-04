@@ -85,7 +85,7 @@
 				author    : 'Marc Hodgins',
 				authorurl : 'http://www.hodginsmedia.com',
 				infourl   : 'http://code.google.com/p/tinymce-plugin-advimagescale',
-				version   : '1.1.0'
+				version   : '1.1.1'
 			};
 		}
 	});
@@ -105,7 +105,7 @@
 
 		// store original dimensions if this is the first resize of this element
 		if (!originalDimensions[elId]) {
-			originalDimensions[elId] = lastDimensions[elId] = {width: dom.getAttrib(el, 'width'), height: dom.getAttrib(el, 'height')};
+			originalDimensions[elId] = lastDimensions[elId] = {width: dom.getAttrib(el, 'width', el.width), height: dom.getAttrib(el, 'height', el.height)};
 		}
 		return true;
 	}
@@ -144,9 +144,9 @@
 			elId = dom.getAttrib(el, 'mce_advimageresize_id');
 		}
 
-		// fix Gecko "expands image by border width" bug before doing anything else
-		if (tinymce.isGecko) {
-			fixGeckoImageBorderGlitch(ed, el);
+		// Both IE7 and Gecko (as of FF3.0.03) has a "expands image by border width" bug before doing anything else
+		if (ed.getParam('advimagescale_fix_border_glitch'), true /* default to true */) {
+			fixImageBorderGlitch(ed, el);
 		}
 
 		// disallow image resize if mce_noresize or the noresize class is set on the image tag
@@ -184,24 +184,26 @@
 		var minH = ed.getParam('advimagescale_min_height');
 
 		// adjust w/h to maintain aspect ratio and stay within maxW/H and minW/H
-	        var newDimensions = maintainAspect(ed, el, dom.getAttrib(el, 'width'), dom.getAttrib(el, 'height'), maxW, maxH, minW, minH);
+		if (ed.getParam('advimagescale_maintain_aspect_ratio'), true /* default to true */) {
+		        var newDimensions = maintainAspect(ed, el, dom.getAttrib(el, 'width', el.width), dom.getAttrib(el, 'height', el.height), maxW, maxH, minW, minH);
 
-		// did maintainAspect make an adjustment to maintain aspect ratio? If so, apply the new width/height
-		var adjusted      = (dom.getAttrib(el, 'width') != newDimensions.width || dom.getAttrib(el, 'height') != newDimensions.height);
-		dom.setAttrib(el, 'width',  newDimensions.width);
-		dom.setAttrib(el, 'height', newDimensions.height);
+			// did maintainAspect make an adjustment to maintain aspect ratio? If so, apply the new width/height
+			var adjusted      = (dom.getAttrib(el, 'width', el.width) != newDimensions.width || dom.getAttrib(el, 'height', el.height) != newDimensions.height);
+			dom.setAttrib(el, 'width',  newDimensions.width);
+			dom.setAttrib(el, 'height', newDimensions.height);
 
-		// if an adjustment was made to preserve aspect ratio - then redraw handles
-		if (adjusted && tinymce.isGecko) {
-			fixGeckoHandles(ed);
+			// if an adjustment was made to preserve aspect ratio - then redraw handles
+			if (adjusted && tinymce.isGecko) {
+				fixGeckoHandles(ed);
+			}
 		}
 
 		if (ed.getParam('advimagescale_append_to_url')) {
-			appendToUri(ed, el, dom.getAttrib(el, 'width'), dom.getAttrib(el, 'height'));
+			appendToUri(ed, el, dom.getAttrib(el, 'width', el.width), dom.getAttrib(el, 'height', el.height));
 		}
 
 		// after all that, was the image resized at all?
-		if (lastDimensions[elId].width != dom.getAttrib(el, 'width') || lastDimensions[elId].height != dom.getAttrib(el, 'height')) {
+		if (lastDimensions[elId].width != dom.getAttrib(el, 'width', el.width) || lastDimensions[elId].height != dom.getAttrib(el, 'height', el.height)) {
 		        // call "image resized" callback (if set), passing editor and element as params
 			if (ed.getParam('advimagescale_resize_callback')) {
 				ed.getParam('advimagescale_resize_callback')(ed, el);
@@ -209,47 +211,53 @@
 		}
 
 		// remember "last dimensions" for next time ..
-	        lastDimensions[elId] = { width: dom.getAttrib(el, 'width'), height: dom.getAttrib(el, 'height') };
+	        lastDimensions[elId] = { width: dom.getAttrib(el, 'width', el.width), height: dom.getAttrib(el, 'height', el.height) };
 	        
 	}
 
 	/**
-	 * Fixes Gecko border width glitch
+	 * Fixes IE7 and Gecko border width glitch
 	 *
-	 * Gecko "adds" the border width to an image after the resize handles have been
+	 * Both "add" the border width to an image after the resize handles have been
 	 * dropped.  This reverses it by looking at the "previous" known size and comparing
 	 * to the current size.  If they don't match, then a resize has taken place and Gecko
 	 * has (probably) messed it up.  So, we reverse it.  Note, this will probably need to be
-	 * wrapped in a conditional statement if/when Gecko fixes this bug.
+	 * wrapped in a conditional statement if/when each browser fixes this bug.
 	 */
-	function fixGeckoImageBorderGlitch(ed, el) {
+	function fixImageBorderGlitch(ed, el) {
 		var dom = ed.dom;
 		var elId = dom.getAttrib(el, 'mce_advimageresize_id');		
-		var currentWidth = dom.getAttrib(el, 'width');
-		var currentHeight= dom.getAttrib(el, 'height');
+		var currentWidth = dom.getAttrib(el, 'width', el.width);
+		var currentHeight= dom.getAttrib(el, 'height', el.height);
+		var adjusted = false;
 		
 		// if current dimensions do not match what we last saw, then a resize has taken place
-		if (currentWidth != lastDimensions[elId].width || currentHeight != lastDimensions[elId].height) {
-
-			// gecko always messes it up by blowing out the w/h by the border width - so fix it!		
+		if (currentWidth != lastDimensions[elId].width) {
 			var adjustWidth = 0;
-			var adjustHeight = 0;
-			
+
 			// get computed border left/right widths
 			adjustWidth += parseInt(dom.getStyle(el, 'borderLeftWidth', 'borderLeftWidth'));
 			adjustWidth += parseInt(dom.getStyle(el, 'borderRightWidth', 'borderRightWidth'));
 			
+			// reset the width height to NOT include these amounts
+			if (adjustWidth > 0) {
+				dom.setAttrib(el, 'width', (currentWidth - adjustWidth));
+				adjusted = true;
+			}
+		}
+		if (currentHeight != lastDimensions[elId].height) {
+			var adjustHeight = 0;
+
 			// get computed border top/bottom widths
 			adjustHeight += parseInt(dom.getStyle(el, 'borderTopWidth', 'borderTopWidth'));
 			adjustHeight += parseInt(dom.getStyle(el, 'borderBottomWidth', 'borderBottomWidth'));
 
-			// reset the width height to NOT include these amounts
-			if (adjustWidth > 0) {
-				dom.setAttrib(el, 'width', (currentWidth - adjustWidth) + 'px');
-			}
 			if (adjustHeight > 0) {
-				dom.setAttrib(el, 'height', (currentHeight - adjustHeight) + 'px');
+				dom.setAttrib(el, 'height', (currentHeight - adjustHeight));
+				adjusted = true;
 			}
+		}
+		if (adjusted && tinymce.isGecko) {
 			fixGeckoHandles(ed);
 		}
 	}
