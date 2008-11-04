@@ -24,18 +24,6 @@
 	 */
 	var lastDimensions = new Array();
 	
-	/**
-	 * Last mouse click location
-	 * @var {object} (clientX, clientY)
-	 */
-	var mouseDownXY = {};
-	
-	/**
-	 * Whether mouse click is currently down on an image tag in the editor
-	 * @var {boolean}
-	 */
-	var mouseDownOnImage = false;
-	
 	tinymce.create('tinymce.plugins.AdvImageScale', {
 		/**
 		 * Initializes the plugin, this will be executed after the plugin has been created.
@@ -47,15 +35,8 @@
 					
 			// Watch for mousedown (to set a unique ID on the element and store original dimensions)
 			ed.onMouseDown.add(function(ed, e) {
-				//e.target.nodeName == 'IMG'
 				var el = tinyMCE.activeEditor.selection.getNode();
 				if (el.nodeName == 'IMG') {
-				
-					// store for fixGeckoGrowGlitch()
-					mouseDownOnImage = true;
-					mouseDownXY.clientX = e.clientX;
-					mouseDownXY.clientY = e.clientY;
-
 					// prepare image for resizing
 					prepareImage(ed, e.target);
 				}
@@ -64,20 +45,7 @@
 			
 			// Watch for mouseup (catch image resizes)
 			ed.onMouseUp.add(function(ed, e) {			
-				var el = tinyMCE.activeEditor.selection.getNode();
-
-				// Watch for and fix gecko bug (where clicking on img
-				// border when it has a CSS border set will cause it
-				// to "grow" for no reason)
-				//
-				// This can be detected because onMouseUp, the event target
-				// appears to be the BODY tag even then the mouseDown appeared
-				// to be on the IMG tag.
-				if (mouseDownOnImage && e.target.nodeName != 'IMG' && tinymce.isGecko) {
-					fixGeckoGrowGlitch(ed, el, e);
-				}
-				mouseDownOnImage = false; //reset mousedown flag
-								
+				var el = tinyMCE.activeEditor.selection.getNode();	
 				if (el.nodeName == 'IMG') {
 					// setTimeout is necessary to allow the browser to complete the resize so we have new dimensions
 					setTimeout(function() {
@@ -176,7 +144,12 @@
 			elId = dom.getAttrib(el, 'mce_advimageresize_id');
 		}
 
-		// disallow image resize if mce_noresize is set in IMG
+		// fix Gecko "expands image by border width" bug before doing anything else
+		if (tinymce.isGecko) {
+			fixGeckoImageBorderGlitch(ed, el);
+		}
+
+		// disallow image resize if mce_noresize or the noresize class is set on the image tag
 		if (dom.getAttrib(el, 'mce_noresize') || dom.hasClass(el, ed.getParam('advimagescale_noresize_class') || 'noresize')) {
 			dom.setAttrib(el, 'width', lastDimensions[elId].width);
 			dom.setAttrib(el, 'height', lastDimensions[elId].height);
@@ -218,13 +191,13 @@
 		dom.setAttrib(el, 'width',  newDimensions.width);
 		dom.setAttrib(el, 'height', newDimensions.height);
 
-		if (ed.getParam('advimagescale_append_to_url')) {
-			appendToUri(ed, el, newDimensions.width, newDimensions.height);
-		}
-
-		// fix Gecko glitches with drag handles after resize
+		// if an adjustment was made to preserve aspect ratio - then redraw handles
 		if (adjusted && tinymce.isGecko) {
 			fixGeckoHandles(ed);
+		}
+
+		if (ed.getParam('advimagescale_append_to_url')) {
+			appendToUri(ed, el, dom.getAttrib(el, 'width'), dom.getAttrib(el, 'height'));
 		}
 
 		// remember "last dimensions" for next time ..
@@ -232,19 +205,42 @@
 	}
 
 	/**
-	 * Fix Gecko border width glitch
+	 * Fixes Gecko border width glitch
 	 *
-	 * The glitch image resize handle clicks to "grow" the image by the width
-	 * of a CSS border set on an image - this counteracts it by resetting the
-	 * dimensions to their pre-click values so that the image doesn't grow
+	 * Gecko "adds" the border width to an image after the resize handles have been
+	 * dropped.  This reverses it by looking at the "previous" known size and comparing
+	 * to the current size.  If they don't match, then a resize has taken place and Gecko
+	 * has (probably) messed it up.  So, we reverse it.  Note, this will probably need to be
+	 * wrapped in a conditional statement if/when Gecko fixes this bug.
 	 */
-	function fixGeckoGrowGlitch(ed, el, e) {
+	function fixGeckoImageBorderGlitch(ed, el) {
 		var dom = ed.dom;
-		var elId = dom.getAttrib(el, 'mce_advimageresize_id');
-		if (mouseDownXY.clientX == e.clientX && mouseDownXY.clientY == e.clientY) {
-			// revert to proper W/H
-			dom.setAttrib(el, 'width', lastDimensions[elId].width);
-			dom.setAttrib(el, 'height', lastDimensions[elId].height);
+		var elId = dom.getAttrib(el, 'mce_advimageresize_id');		
+		var currentWidth = dom.getAttrib(el, 'width');
+		var currentHeight= dom.getAttrib(el, 'height');
+		
+		// if current dimensions do not match what we last saw, then a resize has taken place
+		if (currentWidth != lastDimensions[elId].width || currentHeight != lastDimensions[elId].height) {
+
+			// gecko always messes it up by blowing out the w/h by the border width - so fix it!		
+			var adjustWidth = 0;
+			var adjustHeight = 0;
+			
+			// get computed border left/right widths
+			adjustWidth += parseInt(dom.getStyle(el, 'borderLeftWidth', 'borderLeftWidth'));
+			adjustWidth += parseInt(dom.getStyle(el, 'borderRightWidth', 'borderRightWidth'));
+			
+			// get computed border top/bottom widths
+			adjustHeight += parseInt(dom.getStyle(el, 'borderTopWidth', 'borderTopWidth'));
+			adjustHeight += parseInt(dom.getStyle(el, 'borderBottomWidth', 'borderBottomWidth'));
+
+			// reset the width height to NOT include these amounts
+			if (adjustWidth > 0) {
+				dom.setAttrib(el, 'width', (currentWidth - adjustWidth) + 'px');
+			}
+			if (adjustHeight > 0) {
+				dom.setAttrib(el, 'height', (currentHeight - adjustHeight) + 'px');
+			}
 			fixGeckoHandles(ed);
 		}
 	}
