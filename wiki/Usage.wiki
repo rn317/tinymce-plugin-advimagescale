@@ -30,6 +30,9 @@ tinyMCE.init({
     },
     advimagescale_loaded_callback: function(imgNode) {
         alert(imgNode.src + ' is loaded');
+    },
+    advimagescale_resize_callback: function(editorInstance, imgNode) {
+        alert('resized to ' + imgNode.width + 'x' + imgNode.height);
     }
 });
 
@@ -98,9 +101,10 @@ Note: *All advimagescale`_``*` options are optional.*  By default, the plugin on
 || advimagescale_min_width || integer || not set || Set min image width ||
 || advimagescale_filter_src || string || not set || A regular expression; all image SRC attributes that match this regexp will be managed by the plugin ||
 || advimagescale_filter_class || string || not set || A CSS class name; all IMG tags with this class will be managed by the plugin _(if not set, all images are managed by the plugin)_ ||
-|| advimagescale_loading_callback || function || not set || Callback function for whenever an image is reloading - passes the DOM image node as parameter (often used to show a "please wait" dialog or disable form submission while an image is resizing in conjuction with the advimagescale_append_to_url option) ||
-|| advimagescale_loaded_callback || function || not set || Callback function, called when an image has completed resizing ||
+|| advimagescale_loading_callback || function(imageNode) || not set || Callback function, called when an image begins reloading due to change of the image SRC (usually via advimagescale_append_to_url option) passes the DOM image node as parameter (often used to show a "please wait" dialog or disable form submission while an image is resizing in conjuction with the advimagescale_append_to_url option) ||
+|| advimagescale_loaded_callback || function(imageNode) || not set || Callback function, called when an image URL has changed (usually via advimagescale_append_to_url) and has completed loading ||
 || advimage_noresize_class || string || 'noresize' || A single class name that, if set on an image, tells the plugin to prevent resizing on that image ||
+|| advimagescale_resize_callback || function(editorInstance, imageNode) || not set || Callback function, called when an image has been resized and the new dimensions are available (via imageNode.width / imageNode.height) ||
 
 == Server-side image resampling ==
 
@@ -132,4 +136,4 @@ There are two browser bugs that we discovered while developing this plugin, and 
 
   # *Resize handles do not re-draw*. When the plugin changes the image dimensions to maintain aspect ratio, Gecko does not move the resize handles to wrap the new image dimensions.  This has been worked around by forcing a redraw of the TinyMCE area.  The side effect is that this de-selects the image.  To continue further resizing, you must re-select the image by clicking on it.
 
-  # *Click on resize handles (without dragging to new position) causes image to grow*.  This occurs only when an image also has a border set via the tinymce content_css directive.  This bug is present without this plugin, we are simply working around it here as a convenience.  As a workaround, when clicking on image resize handles (but releasing the mouse without dragging them to a new location), the original dimensions will be preserved and the image will be de-selected (as a consequence of our workaround applying a tinyMCE redraw).
+  # *Resizing image in Gecko (on image with a border) adds border width to image width*.  This occurs only when an image has a border width set via the tinymce content_css directive or via an inline style.  This bug is present without this plugin, we are simply working around it here as a convenience.  This is corrected by automatically adjusting the image to reduce its width by the border width after each resize. The consequence is that the image will be de-selected (as the plugin must force a tinyMCE redraw to move the resize handles into the correct location due to gecko bug #1).
