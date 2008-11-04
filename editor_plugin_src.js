@@ -145,7 +145,7 @@
 		}
 
 		// Both IE7 and Gecko (as of FF3.0.03) has a "expands image by border width" bug before doing anything else
-		if (ed.getParam('advimagescale_fix_border_glitch'), true /* default to true */) {
+		if (ed.getParam('advimagescale_fix_border_glitch', true /* default to true */)) {
 			fixImageBorderGlitch(ed, el);
 		}
 
@@ -184,7 +184,7 @@
 		var minH = ed.getParam('advimagescale_min_height');
 
 		// adjust w/h to maintain aspect ratio and stay within maxW/H and minW/H
-		if (ed.getParam('advimagescale_maintain_aspect_ratio'), true /* default to true */) {
+		if (ed.getParam('advimagescale_maintain_aspect_ratio', true /* default to true */)) {
 		        var newDimensions = maintainAspect(ed, el, dom.getAttrib(el, 'width', el.width), dom.getAttrib(el, 'height', el.height), maxW, maxH, minW, minH);
 
 			// did maintainAspect make an adjustment to maintain aspect ratio? If so, apply the new width/height
