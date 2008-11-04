@@ -200,8 +200,17 @@
 			appendToUri(ed, el, dom.getAttrib(el, 'width'), dom.getAttrib(el, 'height'));
 		}
 
+		// after all that, was the image resized at all?
+		if (lastDimensions[elId].width != dom.getAttrib(el, 'width') || lastDimensions[elId].height != dom.getAttrib(el, 'height')) {
+		        // call "image resized" callback (if set), passing editor and element as params
+			if (ed.getParam('advimagescale_resize_callback')) {
+				ed.getParam('advimagescale_resize_callback')(ed, el);
+			}
+		}
+
 		// remember "last dimensions" for next time ..
 	        lastDimensions[elId] = { width: dom.getAttrib(el, 'width'), height: dom.getAttrib(el, 'height') };
+	        
 	}
 
 	/**
