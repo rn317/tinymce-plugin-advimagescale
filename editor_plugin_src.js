@@ -23,13 +23,19 @@
 	 * @var {array} (w,h)
 	 */
 	var lastDimensions = new Array();
-
+	
 	/**
-	 * Current node
-	 * @var {object}
+	 * Last mouse click location
+	 * @var {object} (clientX, clientY)
 	 */
-	var currentNode;
-
+	var mouseDownXY = {};
+	
+	/**
+	 * Whether mouse click is currently down on an image tag in the editor
+	 * @var {boolean}
+	 */
+	var mouseDownOnImage = false;
+	
 	tinymce.create('tinymce.plugins.AdvImageScale', {
 		/**
 		 * Initializes the plugin, this will be executed after the plugin has been created.
@@ -38,24 +44,61 @@
 		 * @param {string} url Absolute URL to where the plugin is located.
 		 */
 		init : function(ed, url) {
-		
+					
+			// Watch for mousedown (to set a unique ID on the element and store original dimensions)
+			ed.onMouseDown.add(function(ed, e) {
+				//e.target.nodeName == 'IMG'
+				var el = tinyMCE.activeEditor.selection.getNode();
+				if (el.nodeName == 'IMG') {
+				
+					// store for fixGeckoGrowGlitch()
+					mouseDownOnImage = true;
+					mouseDownXY.clientX = e.clientX;
+					mouseDownXY.clientY = e.clientY;
+
+					// prepare image for resizing
+					prepareImage(ed, e.target);
+				}
+				return true;
+			});
+			
 			// Watch for mouseup (catch image resizes)
-			ed.onMouseUp.add(function(ed, e) {
-				currentNode = tinyMCE.activeEditor.selection.getNode();
-				if (currentNode.nodeName == 'IMG') {
-					//setTimeout is necessary to allow the browser to complete the resize so we have new dimensions
+			ed.onMouseUp.add(function(ed, e) {			
+				var el = tinyMCE.activeEditor.selection.getNode();
+
+				// Watch for and fix gecko bug (where clicking on img
+				// border when it has a CSS border set will cause it
+				// to "grow" for no reason)
+				//
+				// This can be detected because onMouseUp, the event target
+				// appears to be the BODY tag even then the mouseDown appeared
+				// to be on the IMG tag.
+				if (mouseDownOnImage && e.target.nodeName != 'IMG' && tinymce.isGecko) {
+					fixGeckoGrowGlitch(ed, el, e);
+				}
+				mouseDownOnImage = false; //reset mousedown flag
+								
+				if (el.nodeName == 'IMG') {
+					// setTimeout is necessary to allow the browser to complete the resize so we have new dimensions
 					setTimeout(function() {
-						constrainSize(currentNode);
+						constrainSize(ed, el);
 					}, 100);
 				}
+				return true;
 			});
 
-			// Append image dimensions to image URLs? (optional)
-			if (ed.getParam('advimagescale_append_to_url')) {
-				// Run constrainSize immediately on all image nodes to append image dimensions to URL
+			// If any of these settings are active, then we need to preProcess the image nodes on startup
+			if (ed.getParam('advimagescale_append_to_url')
+				|| ed.getParam('advimagescale_max_height')
+				|| ed.getParam('advimagescale_max_width')
+				|| ed.getParam('advimagescale_min_height')
+				|| ed.getParam('advimagescale_min_width')
+			    ) {
+				// Run constrainSize immediately on all image nodes to append image dimensions to URL, enforce dimension restrictions, etc...
 				ed.onPreProcess.add(function(ed, o) {
 					tinymce.each(ed.dom.select('img', o.node), function(currentNode) {
-						constrainSize(currentNode);
+						prepareImage(ed, currentNode);
+						constrainSize(ed, currentNode);
 					});
 				});
 			}
@@ -74,7 +117,7 @@
 				author    : 'Marc Hodgins',
 				authorurl : 'http://www.hodginsmedia.com',
 				infourl   : 'http://code.google.com/p/tinymce-plugin-advimagescale',
-				version   : '1.0.2'
+				version   : '1.1.0'
 			};
 		}
 	});
@@ -87,9 +130,8 @@
 	 *
 	 * @param {object} el HTMLDomNode
 	 */
-	function storeDimensions(el)
+	function storeDimensions(ed, el)
 	{
-		var ed = tinyMCE.activeEditor;
 		var dom = ed.dom;
 		var elId = dom.getAttrib(el, 'mce_advimageresize_id');
 
@@ -101,34 +143,65 @@
 	}
 
 	/**
-	 * Adjusts width and height to keep within min/max bounds and also maintain aspect ratio
+	 * Prepare image for resizing
+	 * Check to see if we've seen this IMG tag before; does tasks such as adding
+	 * unique IDs to image tags, saving "original" image dimensions, etc.
+	 * @param {object} e is optional
 	 */
-	function constrainSize(el)
+	function prepareImage(ed, el)
 	{
-	        var ed  = tinyMCE.activeEditor;
+		var dom = ed.dom;
+		var elId= dom.getAttrib(el, 'mce_advimageresize_id');
+
+		// is this the first time this image tag has been seen?
+		if (!elId) {
+			var uniqueId = ed.dom.uniqueId();
+			dom.setAttrib(el, 'mce_advimageresize_id', uniqueId);
+			storeDimensions(ed, el);
+		}
+	}
+
+	/**
+	 * Adjusts width and height to keep within min/max bounds and also maintain aspect ratio
+	 * If mce_noresize attribute is set to image tag, then image resize is disallowed
+	 */
+	function constrainSize(ed, el, e)
+	{
 		var dom = ed.dom;
 		var elId = dom.getAttrib(el, 'mce_advimageresize_id');
 
 		// node must have a unique mce_advimageresize_id before we do anything with it
 		if (!elId) {
-			dom.setAttrib(el, 'mce_advimageresize_id', ed.dom.uniqueId());
+			prepareImage(ed, el);
 			elId = dom.getAttrib(el, 'mce_advimageresize_id');
 		}
-		
-		storeDimensions(el);
+
+		// disallow image resize if mce_noresize is set in IMG
+		if (dom.getAttrib(el, 'mce_noresize') || dom.hasClass(el, ed.getParam('advimagescale_noresize_class') || 'noresize')) {
+			dom.setAttrib(el, 'width', lastDimensions[elId].width);
+			dom.setAttrib(el, 'height', lastDimensions[elId].height);
+			if (tinymce.isGecko) {
+				fixGeckoHandles(ed);
+			}
+			return;
+		}
+
+		storeDimensions(ed, el);
 
 		// allow filtering by regexp so only some images get constrained
 		var src_filter = ed.getParam('advimagescale_filter_src');
 		if (src_filter) {
 			var r = new RegExp(src_filter);
-			if (!el.src.match(r))
+			if (!el.src.match(r)) {
 				return; // skip this element
+			}
 		}
 		// allow filtering by classname
 		var class_filter = ed.getParam('advimagescale_filter_class');
 		if (class_filter) {
-			if(!dom.hasClass(el, class_filter))
+			if (!dom.hasClass(el, class_filter)) {
 				return; // skip this element, doesn't have the class we want
+			}
 		}
 
 		// get (optional) max W/H and min W/H settings
@@ -138,20 +211,20 @@
 		var minH = ed.getParam('advimagescale_min_height');
 
 		// adjust w/h to maintain aspect ratio and stay within maxW/H and minW/H
-	        var newDimensions = maintainAspect(dom.getAttrib(el, 'width'), dom.getAttrib(el, 'height'), el, maxW, maxH, minW, minH);
+	        var newDimensions = maintainAspect(ed, el, dom.getAttrib(el, 'width'), dom.getAttrib(el, 'height'), maxW, maxH, minW, minH);
 
+		// did maintainAspect make an adjustment to maintain aspect ratio? If so, apply the new width/height
 		var adjusted      = (dom.getAttrib(el, 'width') != newDimensions.width || dom.getAttrib(el, 'height') != newDimensions.height);
 		dom.setAttrib(el, 'width',  newDimensions.width);
 		dom.setAttrib(el, 'height', newDimensions.height);
 
 		if (ed.getParam('advimagescale_append_to_url')) {
-			appendToUri(el, newDimensions.width, newDimensions.height);
-		        //dom.setAttrib(el, 'src', newUrl);
+			appendToUri(ed, el, newDimensions.width, newDimensions.height);
 		}
 
 		// fix Gecko glitches with drag handles after resize
 		if (adjusted && tinymce.isGecko) {
-			ed.execCommand('mceRepaint', false);
+			fixGeckoHandles(ed);
 		}
 
 		// remember "last dimensions" for next time ..
@@ -159,26 +232,52 @@
 	}
 
 	/**
+	 * Fix Gecko border width glitch
+	 *
+	 * The glitch image resize handle clicks to "grow" the image by the width
+	 * of a CSS border set on an image - this counteracts it by resetting the
+	 * dimensions to their pre-click values so that the image doesn't grow
+	 */
+	function fixGeckoGrowGlitch(ed, el, e) {
+		var dom = ed.dom;
+		var elId = dom.getAttrib(el, 'mce_advimageresize_id');
+		if (mouseDownXY.clientX == e.clientX && mouseDownXY.clientY == e.clientY) {
+			// revert to proper W/H
+			dom.setAttrib(el, 'width', lastDimensions[elId].width);
+			dom.setAttrib(el, 'height', lastDimensions[elId].height);
+			fixGeckoHandles(ed);
+		}
+	}
+
+	/**
+	 * Fix gecko resize handles glitch
+	 */
+	function fixGeckoHandles(ed) {
+		ed.execCommand('mceRepaint', false);
+	}
+
+	/**
 	 * Set image dimensions on into a uri as querystring params
 	 */
-	function appendToUri(el, w, h) {
-		var ed     = tinyMCE.activeEditor;
+	function appendToUri(ed, el, w, h) {
+		//var ed     = tinyMCE.activeEditor;
 		var dom    = ed.dom;
 		var uri    = dom.getAttrib(el, 'src');
 
 		// filter by img src
 		var src_filter = ed.getParam('advimagescale_filter_src');
 		if (src_filter) {
-			var r = new RegExp(src_filter);
-			if (!uri.match(r))
+			var rSrcFilter = new RegExp(src_filter);
+			if (!uri.match(rSrcFilter)) {
 				return; // skip
+			}
 		}
 		// filter by img classname
 		var class_filter = ed.getParam('advimagescale_filter_class');
 		if (class_filter) {
-			var r = new RegExp(class_filter);
-			if (!dom.hasClass(el, class_filter))
+			if (!dom.hasClass(el, class_filter)) {
 				return;
+			}
 		}
 			
 		var wKey = ed.getParam('advimagescale_url_width_key', 'w');
@@ -186,28 +285,66 @@
 		var hKey = ed.getParam('advimagescale_url_height_key', 'h');
 		uri = setQueryParam(uri, hKey, h);
 
-		dom.setAttrib(el, 'src', uri);
+		// did URI change from previous value? no need to set img src or call callbacks if nothing changed
+		if (uri != dom.getAttrib(el, 'src')) {
+		
+			// trigger image loading callback (if set)
+			if (ed.getParam('advimagescale_loading_callback')) {
+				// call loading callback
+				ed.getParam('advimagescale_loading_callback')(el);
+			}
+			// hook image load(ed) callback (if set)
+			if (ed.getParam('advimagescale_loaded_callback')) {
+				// hook load event on the image tag to call the loaded callback
+				tinymce.dom.Event.add(el, 'load', imageLoadedCallback, {el: el, ed: ed});
+			}
+
+			// set new src
+			dom.setAttrib(el, 'src', uri);
+		}
 	}
+	
+	/**
+	 * Callback event when an image is (re)loaded
+	 * @param {object} e Event (use e.target or this.el to access element, this.ed to access editor instance)
+	 */
+	function imageLoadedCallback(e) {
+		var el       = this.el; // image element
+		var ed       = this.ed; // editor
+		var callback = ed.getParam('advimagescale_loaded_callback'); // user specified callback
+
+		// call callback, pass img as param
+		callback(el);
+		
+		// remove callback event
+		tinymce.dom.Event.remove(el, 'load', imageLoadedCallback);
+	}
+
 
 	/**
  	 * Sets URL querystring parameters by appending or replacing existing params of same name
 	 */
 	function setQueryParam(uri, key, value) {
-		if (!uri.match(/\?/)) uri += '?';
+		if (!uri.match(/\?/)) {
+			uri += '?';
+		}
 		if (!uri.match(new RegExp('([\?&])' + key + '='))) {
-			if (!uri.match(/[&\?]$/)) uri += '&';
+			if (!uri.match(/[&\?]$/)) {
+				uri += '&';
+			}
 			uri += key + '=' + escape(value);
-		} else
+		} else {
 		        uri = uri.replace(new RegExp('([\?\&])' + key + '=[^&]*'), '$1' + key + '=' + escape(value));
+		}
 		return uri;
 	}
 
 	/**
 	 * Returns w/h that maintain aspect ratio
 	 */
-	function maintainAspect(w, h, el, maxW, maxH, minW, minH)
+	function maintainAspect(ed, el, w, h, maxW, maxH, minW, minH)
 	{
-		var ed    = tinyMCE.activeEditor;
+		//var ed    = tinyMCE.activeEditor;
 		var dom   = ed.dom;
 		var elId  = dom.getAttrib(el, 'mce_advimageresize_id');
 
@@ -240,21 +377,22 @@
 
 		// note, min/max behavior is undefined if the minW/H and maxW/H are set such that there is no possible numbers that fit (i.e. really wide, short images)
 		// enforce maxW/maxH
-		if(maxW && ret.width > maxW) {
+		if (maxW && ret.width > maxW) {
 			ret = { width: maxW, height: Math.round(maxW/ratio) };
 		}
-		if(maxH && ret.height > maxH) {
+		if (maxH && ret.height > maxH) {
 			ret = { width: Math.round(maxH/ratio), height: maxH };
 		}
 
 		// enforce minW/minH
-		if(minW && ret.width < minW) {
+		if (minW && ret.width < minW) {
 			ret = { width : minW, height: Math.round(minW/ratio) };
 		}
-		if(minH && ret.height < minH) {
+		if (minH && ret.height < minH) {
 			ret = { height: Math.round(minH/ratio), width: minH };
 		}
 
 		return ret;
 	}
+	
 })();
