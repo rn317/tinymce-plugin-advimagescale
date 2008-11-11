@@ -1,6 +1,8 @@
 #summary How to use the plugin with TinyMCE
 #labels Featured,Phase-Deploy
 
+<wiki:toc max_depth="2" />
+
 = Plugin Usage Instructions =
 
 Start with a working instance of TinyMCE.  Then add the advimagescale plugin by placing the advimagescale folder in your TinyMCE plugins folder, and adding advimagescale to the TinyMCE.init "plugins" configuration parameter.
@@ -20,6 +22,7 @@ tinyMCE.init({
     cleanup_on_startup: true,
     advimagescale_maintain_aspect_ratio: true, /* this is the default behavior */
     advimagescale_fix_border_glitch: true, /* also the default behavior */
+    advimagescale_noresize_all: false, /* set to true to prevent all resizing on images */
     advimagescale_append_to_url: true,
     advimagescale_url_width_key: 'w',
     advimagescale_url_height_key: 'h',
@@ -62,11 +65,15 @@ If you would prefer to place the advimagescale folder outside of your TinyMCE pl
     });
 }}} 
 
-== Prevent image resizing (on certain images) ==
+== Prevent image resizing (on some or all images) ==
 
-You can *prevent image resizing* on any IMG tag by setting the mce_noresize="1" attribute set that IMG tag - for example <img src="" mce_noresize="1">. Note that the mce_noresize attribute will be removed before saving, so this option will *not* get saved for future edits.
+Prevent image resizing on *specific IMG tags* by setting the mce_noresize="1" attribute on that IMG tag - for example <img src="" mce_noresize="1">. Note that the mce_noresize attribute will be removed before saving, so this option will *not* get saved for future edits.
 
-Alternately, use the *advimage_noresize_class* setting to specify a single image class name that will be prevented from resizing (i.e. <img src="" class="noresize">).
+Alternately, use *advimage_noresize_class* to specify a single image class name that is not resizable (i.e. <img src="" class="noresize">).  The default classname is 'noresize'.
+
+To *prevent all images from being resized*, set *advimagescale_noresize_all* to true (this overrides all other plugin options since disallowing all resizes negates the need for the other features).  
+
+These methods are preferable to the tinyMCE forum suggested method of stripping image width/height attributes because it does not strip these attributes.  (Stripping the width/height attributes results in failure of HTML/XHTML validation and slows down page loading).
 
 == Restrict by class name ==
 
@@ -90,25 +97,29 @@ Instead of limiting by image class name, you may define a regular expression pat
     });
 }}}
 
-== All Options ==
-Note: *All advimagescale`_``*` options are optional.*  By default, the plugin only maintains image aspect ratios.  However, additional features exist to *set minimum and maimum widths and heights*, *append image dimensions to the querystring*, and *filter which images get managed by the plugin*.
+== All options ==
+Note: *All advimagescale`_``*` options are optional.*  By default, the plugin only maintains image aspect ratios.  However, additional features exist to *restrict image resizing* on some or all images, *set minimum and maximum dimensions*, *append image dimensions to the querystring*, *trigger callbacks on image-related events* and *filter which images get managed by the plugin*.
 
 || *Configuration option* || *Type* || *Default* || *Description* ||
 || advimagescale_maintain_aspect_ratio || boolean || true || Whether to maintain image aspect ratio (default true) ||
 || advimagescale_append_to_url || boolean || false || Whether to append the image width/height to the IMG SRC. (i.e. `http://mydomain.com/images.php?id=123&w=120&h=120`). This is used for doing automatic server-side resampling of scaled images ||
 || advimagescale_url_width_key || string || 'w' || The querystring parameter to use when appending width to the URL ||
 || advimagescale_url_height_key || string || 'h' || The querystring parameter to use when appending width to the URL ||
+|| advimagescale_fix_border_glitch || boolean || true || Fix the bug (described in #2 in the bug list below).  Most users will want this on (the default is true - so it is on by default). ||
+|| *Specify min/max dimensions* ||||||||
 || advimagescale_max_height || integer || not set || Set a value to limit the maximum image height of all images ||
 || advimagescale_max_width || integer || not set || Set max image width ||
 || advimagescale_min_height || integer || not set || Set min image height ||
 || advimagescale_min_width || integer || not set || Set min image width ||
+|| *Control which images are managed by plugin * ||||||||
 || advimagescale_filter_src || string || not set || A regular expression; all image SRC attributes that match this regexp will be managed by the plugin ||
 || advimagescale_filter_class || string || not set || A CSS class name; all IMG tags with this class will be managed by the plugin _(if not set, all images are managed by the plugin)_ ||
+|| advimagescale_noresize_class || string || 'noresize' || A single class name that, if set on an image, tells the plugin to prevent resizing on that image ||
+|| advimagescale_noresize_all || boolean || false || Set to true to prevent all image resizing in the editor (overrides all other functionality since all resizes will be prevented) ||
+|| *Callbacks* ||||||||
 || advimagescale_loading_callback || function(imageNode) || not set || Callback function, called when an image begins reloading due to change of the image SRC (usually via advimagescale_append_to_url option) passes the DOM image node as parameter (often used to show a "please wait" dialog or disable form submission while an image is resizing in conjuction with the advimagescale_append_to_url option) ||
 || advimagescale_loaded_callback || function(imageNode) || not set || Callback function, called when an image URL has changed (usually via advimagescale_append_to_url) and has completed loading ||
-|| advimage_noresize_class || string || 'noresize' || A single class name that, if set on an image, tells the plugin to prevent resizing on that image ||
 || advimagescale_resize_callback || function(editorInstance, imageNode) || not set || Callback function, called when an image has been resized and the new dimensions are available (via imageNode.width / imageNode.height) ||
-|| advimagescale_fix_border_glitch || boolean || true || Fix the bug (described in #2 in the bug list below).  Most users will want this on (the default is true - so it is on by default). ||
 
 == Server-side image resampling ==
 
