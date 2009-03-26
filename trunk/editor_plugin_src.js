@@ -90,7 +90,9 @@
 					//       perform poorly on large documents
 					var currentNode = se.getNode();
 					tinymce.each(ed.dom.select('img', currentNode), function (currentNode) {
-						constrainSize(ed, currentNode);
+						// IF condition required as tinyMCE inserts 24x24 placeholders uner some conditions
+						if (currentNode.id != "__mce_tmp") 
+							constrainSize(ed, currentNode);
 					});
 				});
 			});
